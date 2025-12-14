@@ -1,0 +1,81 @@
+﻿@page "/Account/ConfirmEmail"
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@using System.Text
+@using ForumAQ.Data
+@using ForumAQ.Data.Services
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager Navigation
+@inject IAutoRoleAssignmentService RoleAssignmentService
+
+<PageTitle>Подтверждение email</PageTitle>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="text-center">Подтверждение email</h3>
+                </div>
+                <div class="card-body text-center">
+                    @if (Message != null)
+                    {
+                        <div class="alert alert-info">@Message</div>
+                    }
+
+                    @if (isConfirmed)
+                    {
+                        <div class="mt-3">
+                            <a href="/Account/Login" class="btn btn-primary">Войти</a>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string? Message { get; set; }
+    private bool isConfirmed = false;
+
+    [SupplyParameterFromQuery]
+    private string? UserId { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Code { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (UserId == null || Code == null)
+        {
+            Message = "Неверная ссылка подтверждения.";
+            return;
+        }
+
+        var user = await UserManager.FindByIdAsync(UserId);
+        if (user == null)
+        {
+            Message = "Пользователь не найден.";
+            return;
+        }
+
+        Code = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(Code));
+
+        // Подтверждаем email
+        var result = await UserManager.ConfirmEmailAsync(user, Code);
+
+        if (result.Succeeded)
+        {
+            // После успешного подтверждения назначаем роль "User"
+            await RoleAssignmentService.AssignRoleOnEmailConfirmationAsync(user.Id, user.Email!);
+
+            Message = "Спасибо за подтверждение email! Ваша учетная запись активирована и вам назначена роль 'User'.";
+            isConfirmed = true;
+        }
+        else
+        {
+            Message = "Ошибка подтверждения email. Ссылка может быть недействительной или устаревшей.";
+        }
+    }
+}

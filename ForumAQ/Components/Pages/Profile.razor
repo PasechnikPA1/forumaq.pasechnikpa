@@ -1,0 +1,285 @@
+﻿@page "/profile"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Identity
+@using ForumAQ.Data
+@using ForumAQ.Data.Services
+@using System.ComponentModel.DataAnnotations
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IForumService ForumService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Мой профиль - ForumAQ</PageTitle>
+
+<div class="container mt-4">
+    @if (currentUser == null)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+            <p class="mt-2">Загрузка профиля...</p>
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <!-- Левая колонка - информация о пользователе -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0 text-center">Мой профиль</h4>
+                    </div>
+                    <div class="card-body text-center">
+                        
+
+                        <h3 class="card-title">@currentUser.DisplayName</h3>
+                        <p class="text-muted">@currentUser.Email</p>
+
+                        <div class="mt-4">
+                            <small class="text-muted">
+                                <i class="bi bi-calendar"></i> На форуме с @currentUser.RegistrationDate.ToString("dd.MM.yyyy")
+                            </small>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(currentUser.Bio))
+                        {
+                            <div class="mt-3">
+                                <p class="card-text">@currentUser.Bio</p>
+                            </div>
+                        }
+
+                        <div class="mt-3">
+                            @if (userRoles != null && userRoles.Any())
+                            {
+                                foreach (var role in userRoles)
+                                {
+                                    <span class="badge bg-info me-1">@role</span>
+                                }
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Правая колонка - статистика и настройки -->
+            <div class="col-md-8">
+                <!-- Статистика -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Моя статистика</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-md-3 mb-3">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Вопросы</h6>
+                                        <h2 class="text-primary">@currentUser.QuestionsAsked</h2>
+                                        <small class="text-muted">Задано вопросов на форуме</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Ответы</h6>
+                                        <h2 class="text-success">@currentUser.AnswersGiven</h2>
+                                        <small class="text-muted">Дано ответов на форуме</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Отправлено</h6>
+                                        <h2 class="text-warning">@currentUser.ThanksCount</h2>
+                                        <small class="text-muted">Благодарностей отправлено</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Получено</h6>
+                                        <h2 class="text-danger">@currentUser.ThanksReceived</h2>
+                                        <small class="text-muted">Благодарностей получено</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Настройки профиля -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Настройки профиля</h5>
+                    </div>
+                    <div class="card-body">
+                        <EditForm Model="ProfileModel" OnValidSubmit="UpdateProfile" FormName="profileForm">
+                            <DataAnnotationsValidator />
+                            <ValidationSummary />
+
+                            <div class="mb-3">
+                                <label class="form-label">Отображаемое имя *</label>
+                                <InputText @bind-Value="ProfileModel.DisplayName" class="form-control"
+                                           placeholder="Как вас будут видеть другие пользователи" />
+                                <ValidationMessage For="@(() => ProfileModel.DisplayName)" />
+                                <div class="form-text">Имя будет отображаться рядом с вашими вопросами и ответами</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">О себе</label>
+                                <InputTextArea @bind-Value="ProfileModel.Bio" class="form-control"
+                                               rows="3"
+                                               placeholder="Расскажите немного о себе..." />
+                                <ValidationMessage For="@(() => ProfileModel.Bio)" />
+                                <div class="form-text">Краткое описание, которое будут видеть другие пользователи</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Email</label>
+                                <InputText @bind-Value="ProfileModel.Email" class="form-control"
+                                           disabled />
+                                <div class="form-text">Email нельзя изменить</div>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <small class="text-muted">
+                                        Последнее обновление: @(currentUser.UpdatedDate?.ToString("dd.MM.yyyy HH:mm") ?? "еще не обновлялся")
+                                    </small>
+                                </div>
+                                <div>
+                                    <button type="submit" class="btn btn-primary" disabled="@isUpdating">
+                                        @if (isUpdating)
+                                        {
+                                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                                            <span>Сохранение...</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Сохранить изменения</span>
+                                        }
+                                    </button>
+                                </div>
+                            </div>
+                        </EditForm>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private ApplicationUser? currentUser;
+    private List<string>? userRoles;
+    private bool isUpdating = false;
+    private ProfileViewModel ProfileModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserProfileAsync();
+    }
+
+    private async Task LoadUserProfileAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            currentUser = await UserManager.GetUserAsync(user);
+
+            if (currentUser != null)
+            {
+                // Получаем роли пользователя
+                userRoles = (await UserManager.GetRolesAsync(currentUser)).ToList();
+
+                // Загружаем актуальную статистику
+                await UpdateUserStatisticsAsync();
+
+                // Заполняем модель для формы
+                ProfileModel = new ProfileViewModel
+                {
+                    DisplayName = currentUser.DisplayName,
+                    Bio = currentUser.Bio ?? "",
+                    Email = currentUser.Email ?? ""
+                };
+            }
+        }
+        else
+        {
+            Navigation.NavigateTo("/Account/Login");
+        }
+    }
+
+    private async Task UpdateUserStatisticsAsync()
+    {
+        if (currentUser == null) return;
+
+        // Обновляем статистику из базы данных
+        currentUser.QuestionsAsked = await ForumService.GetUserQuestionsCountAsync(currentUser.Id);
+        currentUser.AnswersGiven = await ForumService.GetUserAnswersCountAsync(currentUser.Id);
+        currentUser.ThanksReceived = await ForumService.GetUserThanksReceivedCountAsync(currentUser.Id);
+
+        // Сохраняем обновленные данные
+        await UserManager.UpdateAsync(currentUser);
+    }
+
+    private async Task UpdateProfile()
+    {
+        if (currentUser == null) return;
+
+        isUpdating = true;
+
+        try
+        {
+            // Обновляем данные пользователя
+            currentUser.DisplayName = ProfileModel.DisplayName;
+            currentUser.Bio = ProfileModel.Bio;
+            currentUser.UpdatedDate = DateTime.Now;
+
+            var result = await UserManager.UpdateAsync(currentUser);
+
+            if (result.Succeeded)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Профиль успешно обновлен!");
+                await LoadUserProfileAsync(); // Перезагружаем данные
+            }
+            else
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                await JSRuntime.InvokeVoidAsync("alert", $"Ошибка при обновлении профиля: {errors}");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Произошла ошибка: {ex.Message}");
+        }
+        finally
+        {
+            isUpdating = false;
+        }
+    }
+
+    private class ProfileViewModel
+    {
+        [Required(ErrorMessage = "Отображаемое имя обязательно")]
+        [StringLength(50, MinimumLength = 3, ErrorMessage = "Имя должно быть от 3 до 50 символов")]
+        [Display(Name = "Отображаемое имя")]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [StringLength(500, ErrorMessage = "Максимум 500 символов")]
+        [Display(Name = "О себе")]
+        public string Bio { get; set; } = string.Empty;
+
+        [EmailAddress(ErrorMessage = "Некорректный email")]
+        [Display(Name = "Email")]
+        public string Email { get; set; } = string.Empty;
+    }
+}

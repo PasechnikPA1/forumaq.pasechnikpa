@@ -1,0 +1,87 @@
+﻿@using ForumAQ.Data.Services
+@inject IForumService ForumService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IJSRuntime JSRuntime
+
+<button class="btn btn-thank @(IsThanked ? "btn-thanked" : "btn-outline-secondary")"
+        @onclick="HandleThankClick"
+        disabled="@IsDisabled"
+        title="@TooltipText">
+    <i class="bi @IconClass"></i>
+    @if (ShowCount && ThanksCount > 0)
+    {
+        <span class="ms-1">@ThanksCount</span>
+    }
+</button>
+
+@code {
+    [Parameter]
+    public int AnswerId { get; set; }
+
+    [Parameter]
+    public int InitialThanksCount { get; set; }
+
+    [Parameter]
+    public bool ShowCount { get; set; } = true;
+
+    private bool IsThanked { get; set; }
+    private bool IsDisabled { get; set; }
+    private int ThanksCount { get; set; }
+    private string? currentUserId;
+
+    private string IconClass => IsThanked ? "bi-hand-thumbs-up-fill" : "bi-hand-thumbs-up";
+    private string TooltipText => IsThanked ? "Вы уже поблагодарили за этот ответ" : "Сказать спасибо за ответ";
+
+    protected override async Task OnInitializedAsync()
+    {
+        ThanksCount = InitialThanksCount;
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (currentUserId != null)
+            {
+                IsThanked = await ForumService.HasUserThankedAnswerAsync(AnswerId, currentUserId);
+            }
+        }
+    }
+
+    private async Task HandleThankClick()
+    {
+        if (string.IsNullOrEmpty(currentUserId))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Для отправки благодарности необходимо авторизоваться");
+            return;
+        }
+
+        IsDisabled = true;
+
+        try
+        {
+            var success = await ForumService.AddThanksToAnswerAsync(AnswerId, currentUserId);
+
+            if (success)
+            {
+                IsThanked = true;
+                ThanksCount++;
+                await JSRuntime.InvokeVoidAsync("alert", "Спасибо отправлено!");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Вы уже благодарили за этот ответ");
+            }
+        }
+        catch (Exception)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Произошла ошибка при отправке благодарности");
+        }
+        finally
+        {
+            IsDisabled = false;
+            StateHasChanged();
+        }
+    }
+}

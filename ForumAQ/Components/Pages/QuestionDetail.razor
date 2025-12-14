@@ -1,0 +1,339 @@
+﻿@page "/forum/question/{QuestionId:int}"
+@rendermode InteractiveServer
+@using ForumAQ.Data
+@using ForumAQ.Data.Services
+@inject IForumService ForumService
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IJSRuntime JSRuntime
+
+<PageTitle>@(question?.Title ?? "Вопрос")</PageTitle>
+
+@if (question == null)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Загрузка...</span>
+        </div>
+        <p class="mt-2">Загрузка вопроса...</p>
+    </div>
+}
+else
+{
+    <div class="container mt-4">
+        <!-- Хлебные крошки -->
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/forum">Форум</a></li>
+                <li class="breadcrumb-item active">Вопрос</li>
+            </ol>
+        </nav>
+
+        <!-- Вопрос -->
+        <div class="card mb-4">
+            <div class="card-header bg-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h1 class="h4 mb-0">@question.Title</h1>
+                    @if (question.IsSolved)
+                    {
+                        <span class="badge bg-success">Решено</span>
+                    }
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <p class="card-text">@question.Description</p>
+                </div>
+
+                <!-- Теги и метаданные вопроса -->
+                <div class="d-flex justify-content-between align-items-start mt-3">
+                    <!-- Теги слева -->
+                    <div>
+                        @if (!string.IsNullOrEmpty(question.Tags))
+                        {
+                            <div class="d-flex flex-wrap gap-1">
+                                @foreach (var tag in question.Tags.Split(' '))
+                                {
+                                    if (!string.IsNullOrWhiteSpace(tag))
+                                    {
+                                        <span class="badge bg-secondary">@tag</span>
+                                    }
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Метаданные справа -->
+                    <div class="text-end">
+                        <div class="text-muted small">
+                            <div>Автор: @question.User?.DisplayName</div>
+                            <div>Дата: @question.CreatedDate.ToString("dd.MM.yyyy HH:mm")</div>
+                            <div>Просмотров: @question.ViewCount</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ответы -->
+        <div class="mb-4">
+            <h3 class="mb-3">
+                Ответы
+                <span class="badge bg-primary">@question.AnswerCount</span>
+            </h3>
+
+            @if (!question.Answers.Any())
+            {
+                <div class="alert alert-info">
+                    Пока нет ответов. Будьте первым, кто ответит на этот вопрос!
+                </div>
+            }
+            else
+            {
+                @foreach (var answer in question.Answers.OrderByDescending(a => a.IsHelpful).ThenByDescending(a => a.ThanksCount).ThenBy(a => a.CreatedDate))
+                {
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <p class="card-text mb-3">@answer.Content</p>
+
+                            <!-- Информация об ответе -->
+                            <div class="d-flex justify-content-between align-items-center">
+                                <!-- Автор слева -->
+                                <div class="d-flex align-items-center gap-2">
+                                    <small class="text-muted">
+                                        Автор: @answer.User?.DisplayName
+                                    </small>
+                                    @if (answer.IsHelpful)
+                                    {
+                                        <span class="badge bg-success">
+                                            Полезный ответ
+                                        </span>
+                                    }
+                                    @if (answer.ThanksCount > 0)
+                                    {
+                                        <span class="badge bg-light text-dark border">
+                                            Благодарностей: @answer.ThanksCount
+                                        </span>
+                                    }
+                                </div>
+
+                                <!-- Дата и кнопка справа -->
+                                <div class="d-flex align-items-center gap-3">
+                                    <small class="text-muted">
+                                        @answer.CreatedDate.ToString("dd.MM.yyyy HH:mm")
+                                    </small>
+
+                                    <!-- Кнопка благодарности -->
+                                    @if (currentUserId != answer.UserId)
+                                    {
+                                        @if (HasUserThankedAnswer(answer.Id))
+                                        {
+                                            <span class="badge bg-success">
+                                                Отблагодарили
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-outline-success"
+                                                    @onclick="() => ThankAnswer(answer.Id)"
+                                                    disabled="@isThanking">
+                                                Отблагодарить
+                                            </button>
+                                        }
+                                    }
+
+                                    @if (CanMarkAsHelpful(answer))
+                                    {
+                                        <button class="btn btn-sm btn-outline-primary"
+                                                @onclick="() => MarkAsHelpful(answer.Id)">
+                                            Отметить как решение
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <!-- Форма для ответа -->
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">Ваш ответ</h4>
+            </div>
+            <div class="card-body">
+                <EditForm Model="newAnswer" OnValidSubmit="SubmitAnswer" FormName="answerForm">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+
+                    <div class="mb-3">
+                        <InputTextArea @bind-Value="newAnswer.Content" class="form-control"
+                                       rows="5"
+                                       placeholder="Напишите ваш ответ здесь..." />
+                        <ValidationMessage For="@(() => newAnswer.Content)" />
+                        <div class="form-text">
+                            Будьте вежливы и конструктивны в своем ответе.
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+                            @if (isSubmitting)
+                            {
+                                <span class="spinner-border spinner-border-sm" role="status"></span>
+                                <span>Отправка...</span>
+                            }
+                            else
+                            {
+                                <span>Ответить</span>
+                            }
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int QuestionId { get; set; }
+
+    private Question? question;
+    private Answer newAnswer = new();
+    private bool isSubmitting = false;
+    private string? currentUserId;
+    private bool isThanking = false;
+    private List<int> thankedAnswers = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadQuestion();
+
+        // Получаем ID текущего пользователя
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        currentUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    }
+
+    private async Task LoadQuestion()
+    {
+        question = await ForumService.GetQuestionByIdAsync(QuestionId);
+        if (question != null)
+        {
+            // Увеличиваем счетчик просмотров
+            await ForumService.IncrementViewCountAsync(QuestionId);
+
+            // Загружаем информацию о благодарностях текущего пользователя
+            if (currentUserId != null)
+            {
+                foreach (var answer in question.Answers)
+                {
+                    var hasThanked = await ForumService.HasUserThankedAnswerAsync(answer.Id, currentUserId);
+                    if (hasThanked)
+                    {
+                        thankedAnswers.Add(answer.Id);
+                    }
+                }
+            }
+        }
+        else
+        {
+            Navigation.NavigateTo("/forum");
+        }
+    }
+
+    private async Task SubmitAnswer()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (!user.Identity.IsAuthenticated)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Для ответа необходимо авторизоваться");
+            Navigation.NavigateTo("/Account/Login");
+            return;
+        }
+
+        isSubmitting = true;
+
+        try
+        {
+            newAnswer.QuestionId = QuestionId;
+            var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            await ForumService.CreateAnswerAsync(newAnswer, userId);
+            await LoadQuestion(); // Перезагружаем вопрос с новыми ответами
+
+            newAnswer = new Answer(); // Сбрасываем форму
+            await JSRuntime.InvokeVoidAsync("alert", "Ответ успешно добавлен!");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Ошибка при добавлении ответа: {ex.Message}");
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task ThankAnswer(int answerId)
+    {
+        if (string.IsNullOrEmpty(currentUserId))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Для отправки благодарности необходимо авторизоваться");
+            Navigation.NavigateTo("/Account/Login");
+            return;
+        }
+
+        isThanking = true;
+
+        try
+        {
+            var success = await ForumService.AddThanksToAnswerAsync(answerId, currentUserId);
+
+            if (success)
+            {
+                thankedAnswers.Add(answerId);
+                await LoadQuestion(); // Перезагружаем для обновления счетчиков
+                await JSRuntime.InvokeVoidAsync("alert", "Благодарность отправлена!");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Вы уже поблагодарили за этот ответ");
+            }
+        }
+        catch (Exception)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Произошла ошибка при отправке благодарности");
+        }
+        finally
+        {
+            isThanking = false;
+        }
+    }
+
+    private bool HasUserThankedAnswer(int answerId)
+    {
+        return thankedAnswers.Contains(answerId);
+    }
+
+    private async Task MarkAsHelpful(int answerId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm",
+            "Отметить этот ответ как полезный?");
+
+        if (confirmed)
+        {
+            await ForumService.MarkAnswerAsHelpfulAsync(answerId);
+            await LoadQuestion(); // Перезагружаем для обновления статуса
+        }
+    }
+
+    private bool CanMarkAsHelpful(Answer answer)
+    {
+        // Только автор вопроса может отметить ответ как полезный
+        return currentUserId == question?.UserId && !answer.IsHelpful;
+    }
+}
