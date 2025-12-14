@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace ForumAQ.Data.Services
@@ -274,6 +275,159 @@ namespace ForumAQ.Data.Services
                 .Where(a => a.UserId == userId)
                 .OrderByDescending(a => a.CreatedDate)
                 .ToListAsync();
+        }
+        private readonly UserManager<ApplicationUser> _userManager;
+
+        // В конструкторе добавьте UserManager
+        public ForumService(ApplicationDbContext context,
+                            ILogger<ForumService> logger,
+                            UserManager<ApplicationUser> userManager)
+        {
+            _context = context;
+            _logger = logger;
+            _userManager = userManager;
+        }
+
+        public async Task<bool> DeleteQuestionWithModerationAsync(int questionId, string moderatorId, bool banUser, int? banDays = null, string? reason = null)
+        {
+            try
+            {
+                var question = await _context.Questions
+                    .Include(q => q.User)
+                    .Include(q => q.Answers)
+                    .FirstOrDefaultAsync(q => q.Id == questionId);
+
+                if (question == null) return false;
+
+                // Получаем ID автора вопроса
+                var authorId = question.UserId;
+
+                // Удаляем все ответы к вопросу
+                _context.Answers.RemoveRange(question.Answers);
+
+                // Удаляем вопрос
+                _context.Questions.Remove(question);
+
+                // Если нужно забанить пользователя
+                if (banUser && !string.IsNullOrEmpty(authorId) && banDays.HasValue)
+                {
+                    var banRecord = new BanRecord
+                    {
+                        UserId = authorId,
+                        ModeratorId = moderatorId,
+                        Reason = reason ?? "Нарушение правил в вопросе",
+                        BannedAt = DateTime.Now,
+                        BannedUntil = DateTime.Now.AddDays(banDays.Value),
+                        BanType = BanType.QuestionViolation
+                    };
+
+                    _context.BanRecords.Add(banRecord);
+
+                    // Также можно пометить пользователя как забаненного
+                    var user = await _userManager.FindByIdAsync(authorId);
+                    if (user != null)
+                    {
+                        // Можно добавить флаг в пользователя
+                        _logger.LogInformation($"Пользователь {user.UserName} забанен на {banDays} дней за нарушение в вопросе");
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation($"Вопрос {questionId} удален модератором {moderatorId}. Бан пользователя: {banUser}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ошибка при модерации вопроса {questionId}");
+                return false;
+            }
+        }
+
+        public async Task<bool> DeleteAnswerWithModerationAsync(int answerId, string moderatorId, bool banUser, int? banDays = null, string? reason = null)
+        {
+            try
+            {
+                var answer = await _context.Answers
+                    .Include(a => a.User)
+                    .Include(a => a.Question)
+                    .FirstOrDefaultAsync(a => a.Id == answerId);
+
+                if (answer == null) return false;
+
+                // Получаем ID автора ответа
+                var authorId = answer.UserId;
+
+                // Уменьшаем счетчик ответов у вопроса
+                if (answer.Question != null)
+                {
+                    answer.Question.AnswerCount--;
+                }
+
+                // Удаляем ответ
+                _context.Answers.Remove(answer);
+
+                // Если нужно забанить пользователя
+                if (banUser && !string.IsNullOrEmpty(authorId) && banDays.HasValue)
+                {
+                    var banRecord = new BanRecord
+                    {
+                        UserId = authorId,
+                        ModeratorId = moderatorId,
+                        Reason = reason ?? "Нарушение правил в ответе",
+                        BannedAt = DateTime.Now,
+                        BannedUntil = DateTime.Now.AddDays(banDays.Value),
+                        BanType = BanType.AnswerViolation
+                    };
+
+                    _context.BanRecords.Add(banRecord);
+                }
+
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation($"Ответ {answerId} удален модератором {moderatorId}. Бан пользователя: {banUser}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ошибка при модерации ответа {answerId}");
+                return false;
+            }
+        }
+
+        public async Task<bool> IsUserBannedAsync(string userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+                return false;
+
+            // Используем DateTime.Now в условии вместо свойства IsActive
+            var activeBan = await _context.BanRecords
+                .Where(b => b.UserId == userId && b.BannedUntil > DateTime.Now)
+                .FirstOrDefaultAsync();
+
+            return activeBan != null;
+        }
+
+        public async Task<List<BanRecord>> GetUserBansAsync(string userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+                return new List<BanRecord>();
+
+            return await _context.BanRecords
+                .Include(b => b.Moderator)
+                .Where(b => b.UserId == userId)
+                .OrderByDescending(b => b.BannedAt)
+                .ToListAsync();
+        }
+        public async Task<BanRecord?> GetActiveBanAsync(string userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+                return null;
+
+            return await _context.BanRecords
+                .Where(b => b.UserId == userId && b.BannedUntil > DateTime.Now)
+                .OrderByDescending(b => b.BannedUntil)
+                .FirstOrDefaultAsync();
         }
     }
 }

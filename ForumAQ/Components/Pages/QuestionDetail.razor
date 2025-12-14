@@ -29,6 +29,18 @@ else
             </ol>
         </nav>
 
+        <!-- Кнопки модерации для вопроса -->
+        @if (IsModeratorOrAdmin)
+        {
+            <div class="d-flex justify-content-end mb-3">
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-danger" @onclick="ShowDeleteQuestionModal">
+                        Удалить вопрос
+                    </button>
+                </div>
+            </div>
+        }
+
         <!-- Вопрос -->
         <div class="card mb-4">
             <div class="card-header bg-light">
@@ -117,8 +129,8 @@ else
                                     }
                                 </div>
 
-                                <!-- Дата и кнопка справа -->
-                                <div class="d-flex align-items-center gap-3">
+                                <!-- Дата и кнопки справа -->
+                                <div class="d-flex align-items-center gap-2">
                                     <small class="text-muted">
                                         @answer.CreatedDate.ToString("dd.MM.yyyy HH:mm")
                                     </small>
@@ -149,6 +161,15 @@ else
                                             Отметить как решение
                                         </button>
                                     }
+
+                                    <!-- Кнопки модерации для ответа -->
+                                    @if (IsModeratorOrAdmin)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                @onclick="() => ShowDeleteAnswerModal(answer.Id, answer.UserId, answer.User?.DisplayName)">
+                                            Удалить ответ
+                                        </button>
+                                    }
                                 </div>
                             </div>
                         </div>
@@ -158,43 +179,255 @@ else
         </div>
 
         <!-- Форма для ответа -->
-        <div class="card">
-            <div class="card-header">
-                <h4 class="mb-0">Ваш ответ</h4>
+        @if (!isUserBanned)
+        {
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Ваш ответ</h4>
+                </div>
+                <div class="card-body">
+                    <EditForm Model="newAnswer" OnValidSubmit="SubmitAnswer" FormName="answerForm">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+
+                        <div class="mb-3">
+                            <InputTextArea @bind-Value="newAnswer.Content" class="form-control"
+                                           rows="5"
+                                           placeholder="Напишите ваш ответ здесь..." />
+                            <ValidationMessage For="@(() => newAnswer.Content)" />
+                            <div class="form-text">
+                                Будьте вежливы и конструктивны в своем ответе.
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+                                @if (isSubmitting)
+                                {
+                                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                                    <span>Отправка...</span>
+                                }
+                                else
+                                {
+                                    <span>Ответить</span>
+                                }
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
             </div>
-            <div class="card-body">
-                <EditForm Model="newAnswer" OnValidSubmit="SubmitAnswer" FormName="answerForm">
-                    <DataAnnotationsValidator />
-                    <ValidationSummary />
+        }
+        else
+        {
+            <div class="alert alert-danger">
+                <strong>Вы заблокированы!</strong> Вы не можете оставлять ответы до @banEndDate.
+            </div>
+        }
+    </div>
+}
+
+<!-- Модальное окно удаления вопроса -->
+@if (showDeleteQuestionModal)
+{
+    <div class="modal-container" style="display: flex;">
+        <div class="modal-backdrop" @onclick="() => showDeleteQuestionModal = false"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Удаление вопроса</h5>
+                <button type="button" class="close-btn" @onclick="() => showDeleteQuestionModal = false">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <p>Вы уверены, что хотите удалить этот вопрос?</p>
+                    <p class="text-danger"><strong>Пользователь:</strong> @(question?.User?.DisplayName ?? "Неизвестный автор")</p>
+                </div>
+
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" @bind="banQuestionUser">
+                    <label class="form-check-label">
+                        Заблокировать пользователя
+                    </label>
+                </div>
+
+                @if (banQuestionUser)
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Срок блокировки (дни):</label>
+                        <select class="form-select" @bind="banQuestionDays">
+                            <option value="1">1 день</option>
+                            <option value="3">3 дня</option>
+                            <option value="7">7 дней</option>
+                            <option value="30">30 дней</option>
+                            <option value="365">1 год (365 дней)</option>
+                            <option value="8888">Навсегда </option>
+                        </select>
+                    </div>
 
                     <div class="mb-3">
-                        <InputTextArea @bind-Value="newAnswer.Content" class="form-control"
-                                       rows="5"
-                                       placeholder="Напишите ваш ответ здесь..." />
-                        <ValidationMessage For="@(() => newAnswer.Content)" />
-                        <div class="form-text">
-                            Будьте вежливы и конструктивны в своем ответе.
-                        </div>
+                        <label class="form-label">Причина блокировки:</label>
+                        <textarea class="form-control" rows="3" @bind="banQuestionReason"
+                                  placeholder="Укажите причину блокировки..."></textarea>
                     </div>
-
-                    <div class="d-flex justify-content-end">
-                        <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
-                            @if (isSubmitting)
-                            {
-                                <span class="spinner-border spinner-border-sm" role="status"></span>
-                                <span>Отправка...</span>
-                            }
-                            else
-                            {
-                                <span>Ответить</span>
-                            }
-                        </button>
-                    </div>
-                </EditForm>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="() => showDeleteQuestionModal = false">Отмена</button>
+                <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteQuestion" disabled="@isProcessing">
+                    @if (isProcessing)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                        <span>Удаление...</span>
+                    }
+                    else
+                    {
+                        <span>@(banQuestionUser ? "Удалить и заблокировать" : "Удалить")</span>
+                    }
+                </button>
             </div>
         </div>
     </div>
 }
+
+<!-- Модальное окно удаления ответа -->
+@if (showDeleteAnswerModal)
+{
+    <div class="modal-container" style="display: flex;">
+        <div class="modal-backdrop" @onclick="() => showDeleteAnswerModal = false"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Удаление ответа</h5>
+                <button type="button" class="close-btn" @onclick="() => showDeleteAnswerModal = false">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <p>Вы уверены, что хотите удалить этот ответ?</p>
+                    <p class="text-danger"><strong>Пользователь:</strong> @answerAuthorName</p>
+                </div>
+
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" @bind="banAnswerUser">
+                    <label class="form-check-label">
+                        Заблокировать пользователя
+                    </label>
+                </div>
+
+                @if (banAnswerUser)
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Срок блокировки (дни):</label>
+                        <select class="form-select" @bind="banAnswerDays">
+                            <option value="1">1 день</option>
+                            <option value="3">3 дня</option>
+                            <option value="7">7 дней</option>
+                            <option value="30">30 дней</option>
+                            <option value="365">1 год (365 дней)</option>
+                            <option value="8888">Навсегда </option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Причина блокировки:</label>
+                        <textarea class="form-control" rows="3" @bind="banAnswerReason"
+                                  placeholder="Укажите причину блокировки..."></textarea>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="() => showDeleteAnswerModal = false">Отмена</button>
+                <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteAnswer" disabled="@isProcessing">
+                    @if (isProcessing)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                        <span>Удаление...</span>
+                    }
+                    else
+                    {
+                        <span>@(banAnswerUser ? "Удалить и заблокировать" : "Удалить")</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .modal-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1050;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-backdrop {
+        position: fixed; /* Измените с absolute на fixed */
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1040; /* Ниже чем модальное окно */
+    }
+
+    .modal-content {
+        position: relative;
+        background: white;
+        border-radius: 8px;
+        padding: 0;
+        max-width: 500px;
+        width: 90%;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        z-index: 1050; /* Выше чем backdrop */
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid #dee2e6;
+        background-color: #f8f9fa;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+
+        .modal-header h5 {
+            margin: 0;
+            color: #dc3545;
+        }
+
+    .close-btn {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #6c757d;
+        line-height: 1;
+        padding: 0.5rem;
+        margin: -0.5rem -0.5rem -0.5rem auto;
+    }
+
+        .close-btn:hover {
+            color: #000;
+        }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .modal-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid #dee2e6;
+        text-align: right;
+    }
+</style>
 
 @code {
     [Parameter]
@@ -206,14 +439,41 @@ else
     private string? currentUserId;
     private bool isThanking = false;
     private List<int> thankedAnswers = new();
+    private bool IsModeratorOrAdmin = false;
+    private bool showDeleteQuestionModal = false;
+    private bool showDeleteAnswerModal = false;
+    private int answerToDeleteId;
+    private string answerAuthorId = string.Empty;
+    private string answerAuthorName = string.Empty;
+    private bool isProcessing = false;
+
+    // Для бана пользователя
+    private bool isUserBanned = false;
+    private string banEndDate = "определенной даты";
+
+    // Для модалки удаления вопроса
+    private bool banQuestionUser = false;
+    private int banQuestionDays = 1;
+    private string banQuestionReason = "Нарушение правил сообщества";
+
+    // Для модалки удаления ответа
+    private bool banAnswerUser = false;
+    private int banAnswerDays = 1;
+    private string banAnswerReason = "Нарушение правил сообщества";
 
     protected override async Task OnInitializedAsync()
     {
         await LoadQuestion();
 
-        // Получаем ID текущего пользователя
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        currentUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var user = authState.User;
+        currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        // Проверяем права модератора/админа
+        IsModeratorOrAdmin = user.IsInRole("Admin") || user.IsInRole("Moderator");
+
+        // Проверяем, забанен ли пользователь
+        await CheckUserBanStatus();
     }
 
     private async Task LoadQuestion()
@@ -240,6 +500,26 @@ else
         else
         {
             Navigation.NavigateTo("/forum");
+        }
+    }
+
+    private async Task CheckUserBanStatus()
+    {
+        if (string.IsNullOrEmpty(currentUserId))
+        {
+            isUserBanned = false;
+            return;
+        }
+
+        isUserBanned = await ForumService.IsUserBannedAsync(currentUserId);
+
+        if (isUserBanned)
+        {
+            var activeBan = await GetActiveBanAsync();
+            if (activeBan != null)
+            {
+                banEndDate = activeBan.BannedUntil.ToString("dd.MM.yyyy HH:mm");
+            }
         }
     }
 
@@ -335,5 +615,117 @@ else
     {
         // Только автор вопроса может отметить ответ как полезный
         return currentUserId == question?.UserId && !answer.IsHelpful;
+    }
+
+    // Методы модерации
+    private void ShowDeleteQuestionModal()
+    {
+        showDeleteQuestionModal = true;
+        banQuestionUser = false;
+        banQuestionDays = 1;
+        banQuestionReason = "Нарушение правил сообщества";
+    }
+
+    private void ShowDeleteAnswerModal(int answerId, string authorId, string? authorName)
+    {
+        answerToDeleteId = answerId;
+        answerAuthorId = authorId;
+        answerAuthorName = authorName ?? "Неизвестный пользователь";
+        showDeleteAnswerModal = true;
+        banAnswerUser = false;
+        banAnswerDays = 1;
+        banAnswerReason = "Нарушение правил сообщества";
+    }
+
+    private async Task ConfirmDeleteQuestion()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var moderatorId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(moderatorId))
+            return;
+
+        isProcessing = true;
+
+        try
+        {
+            var success = await ForumService.DeleteQuestionWithModerationAsync(
+                QuestionId,
+                moderatorId,
+                banQuestionUser,
+                banQuestionUser ? banQuestionDays : null,
+                banQuestionUser ? banQuestionReason : null);
+
+            if (success)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Вопрос успешно удален" +
+                    (banQuestionUser ? " и пользователь заблокирован" : ""));
+                Navigation.NavigateTo("/forum");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Ошибка при удалении вопроса");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Ошибка: {ex.Message}");
+        }
+        finally
+        {
+            isProcessing = false;
+            showDeleteQuestionModal = false;
+        }
+    }
+
+    private async Task ConfirmDeleteAnswer()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var moderatorId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(moderatorId))
+            return;
+
+        isProcessing = true;
+
+        try
+        {
+            var success = await ForumService.DeleteAnswerWithModerationAsync(
+                answerToDeleteId,
+                moderatorId,
+                banAnswerUser,
+                banAnswerUser ? banAnswerDays : null,
+                banAnswerUser ? banAnswerReason : null);
+
+            if (success)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Ответ успешно удален" +
+                    (banAnswerUser ? " и пользователь заблокирован" : ""));
+                await LoadQuestion(); // Перезагружаем страницу
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Ошибка при удалении ответа");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Ошибка: {ex.Message}");
+        }
+        finally
+        {
+            isProcessing = false;
+            showDeleteAnswerModal = false;
+        }
+    }
+
+    private async Task<BanRecord?> GetActiveBanAsync()
+    {
+        if (string.IsNullOrEmpty(currentUserId))
+            return null;
+
+        return await ForumService.GetActiveBanAsync(currentUserId);
     }
 }

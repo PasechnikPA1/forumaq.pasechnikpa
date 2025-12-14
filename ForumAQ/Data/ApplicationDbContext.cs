@@ -1,6 +1,7 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Identity;
+using System.Reflection.Emit;
 
 namespace ForumAQ.Data
 {
@@ -15,10 +16,23 @@ namespace ForumAQ.Data
         public DbSet<Question> Questions { get; set; }
         public DbSet<Answer> Answers { get; set; }
         public DbSet<ThanksHistory> ThanksHistories { get; set; }
+        public DbSet<BanRecord> BanRecords { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+            builder.Entity<BanRecord>(entity =>
+            {
+                entity.HasOne(br => br.User)
+                      .WithMany()
+                      .HasForeignKey(br => br.UserId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(br => br.Moderator)
+                      .WithMany()
+                      .HasForeignKey(br => br.ModeratorId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
 
             // —оздание ролей
             var roles = new[]
@@ -108,9 +122,11 @@ namespace ForumAQ.Data
                     ViewCount = 8,
                     AnswerCount = 1
                 }
+
             );
 
-            // Ќе добавл€ем тестовые ответы здесь, они будут создаватьс€ динамически
+            
         }
+
     }
 }

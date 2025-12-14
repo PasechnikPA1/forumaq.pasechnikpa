@@ -1,0 +1,17 @@
+﻿@page "/admin/bans"
+@attribute [Authorize(Policy = "AdminOnly")]
+@rendermode InteractiveServer
+@using ForumAQ.Data
+@using ForumAQ.Data.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@inject IForumService ForumService
+@inject UserManager<ApplicationUser> UserManager
+
+<PageTitle>Управление банами</PageTitle>
+
+<div class="container mt-4">
+    <h1>Управление банами пользователей</h1>
+
+    <!-- Тут можно добавить таблицу с активными банами и историей -->
+</div>

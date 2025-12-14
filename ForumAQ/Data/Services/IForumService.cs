@@ -30,5 +30,13 @@ namespace ForumAQ.Data.Services
         Task<int> GetUserThanksReceivedCountAsync(string userId);
         Task<List<Question>> GetUserQuestionsAsync(string userId);
         Task<List<Answer>> GetUserAnswersAsync(string userId);
+        // Методы модерации
+        Task<bool> DeleteQuestionWithModerationAsync(int questionId, string moderatorId, bool banUser, int? banDays = null, string? reason = null);
+        Task<bool> DeleteAnswerWithModerationAsync(int answerId, string moderatorId, bool banUser, int? banDays = null, string? reason = null);
+        Task<bool> IsUserBannedAsync(string userId);
+        Task<List<BanRecord>> GetUserBansAsync(string userId);
+        
+        Task<BanRecord?> GetActiveBanAsync(string userId);
+        
     }
 }
